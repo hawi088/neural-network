@@ -1,91 +1,88 @@
-# Forward Propagation From Scratch — A Tiny Neural Network in NumPy
+# Neural Network From Scratch — Forward Propagation + Backpropagation in NumPy
 
-A minimal, fully manual implementation of forward propagation through a 2-layer neural network — no PyTorch, no TensorFlow, just NumPy and matrix multiplication.
+A minimal, fully manual implementation of a 2-layer neural network — forward pass, loss, backpropagation, and gradient descent — no PyTorch, no TensorFlow, just NumPy and matrix calculus.
 
-This project exists to answer one question: *what is actually happening inside a neural network before you ever start training it?*
+This project exists to answer one question: *what is actually happening inside a neural network when it "learns"?*
 
 ## Overview
 
-Given a single input vector, the network pushes it through two layers and produces a probability distribution over 3 output classes:
+The network pushes an input through two layers to produce a probability distribution, measures how wrong that prediction is, then walks the error backward through the network to update every weight and bias:
 
 ```
 Input (X)
    ↓
-Layer 1: z1 = W1·X + b1   →  ReLU  →  a1
+Layer 1: z1 = W1·X + b1   →  ReLU     →  a1
    ↓
 Layer 2: z2 = W2·a1 + b2  →  Softmax  →  ŷ
    ↓
-Prediction = argmax(ŷ)
+Loss = Cross-Entropy(ŷ, Y)
+   ↓
+Backpropagation: dz2 → dW2, db2 → dA1 → dz1 → dW1, db1
+   ↓
+Gradient Descent: W -= lr * dW,  b -= lr * db
+   ↓
+Repeat for 1000 epochs
 ```
 
-Every weight, bias, and activation function is hand-coded — no `model.forward()`, no autograd, no framework doing the matrix math behind the scenes.
+Every gradient is derived and coded by hand — no `.backward()`, no autograd.
 
 ## Files
 
 | File | Description |
 |---|---|
-| `neuralNetwork.py` | Full forward pass: layer 1 (ReLU) → layer 2 (Softmax) → prediction |
+| `neuralNetwork.py` | Full forward pass + loss + backpropagation + training loop |
 | `README.md` | This file |
 
 ## How It Works
 
-**1. Input**
-```python
-X = [[2], [3]]
-```
-A single example with 2 features.
+**1. Forward pass** (same as the earlier forward-propagation-only version — a linear transform, ReLU, another linear transform, Softmax).
 
-**2. Layer 1 — Linear transformation + ReLU**
+**2. Loss — Cross-Entropy**
 ```python
-z1 = W1 @ X + b1
-a1 = np.maximum(0, z1)     # ReLU: keeps positive values, zeroes out negative ones
+loss = -np.sum(Y * np.log(Y_hat + 1e-8))
 ```
-`W1` is a 2×2 weight matrix, `b1` is a bias vector. ReLU introduces non-linearity — without it, stacking layers would collapse into a single linear transformation, no matter how many layers you add.
+Measures how far the predicted probability distribution is from the true one-hot label `Y`. The `+ 1e-8` prevents `log(0)`, which would otherwise blow up to `-inf`.
 
-**3. Layer 2 — Linear transformation + Softmax**
+**3. Backpropagation — the chain rule, applied layer by layer**
 ```python
-z2 = W2 @ a1 + b2
-Y_hat = softmax(z2)
-```
-`W2` maps the 2-dimensional hidden layer output to 3 output scores (logits). Softmax then converts those raw scores into a proper probability distribution — all values between 0 and 1, summing to 1.
+dz2 = Y_hat - Y                 # gradient of Softmax + Cross-Entropy combined
+dW2 = dz2 @ a1.T
+db2 = dz2
 
-```python
-def softmax(z):
-    exp_z = np.exp(z - np.max(z))   # subtracting max for numerical stability
-    return exp_z / np.sum(exp_z)
+dA1 = W2.T @ dz2                # push the error back through W2
+dz1 = dA1 * relu_derivative(z1) # push it back through ReLU
+dW1 = dz1 @ X.T
+db1 = dz1
 ```
+The key trick here is that `dz2 = Y_hat - Y` is the *combined* gradient of Softmax and Cross-Entropy — when these two are paired together (as they almost always are for classification), their gradients simplify beautifully into this one clean subtraction. That's not a coincidence, it's why Softmax and Cross-Entropy are used together so often.
 
-**4. Prediction**
+**4. Parameter update — Gradient Descent**
 ```python
-prediction = np.argmax(Y_hat)
+W2 -= learning_rate * dW2
+b2 -= learning_rate * db2
+W1 -= learning_rate * dW1
+b1 -= learning_rate * db1
 ```
-The predicted class is simply whichever output has the highest probability.
+Repeated for 1000 epochs.
 
 ## Example Output
 
-With the weights and biases defined in the script:
-
 ```
-z1 = [[-1], [8]]
-a1 = [[0],  [8]]        # ReLU zeroed out the negative value
-
-z2 = [[1], [10], [-8]]
-Y_hat ≈ [[0.0001], [0.9999], [0.0000]]
-
-prediction = 1
+Epoch    0 | Loss: 0.000123 | pred: 1
+Epoch  500 | Loss: 0.000113 | pred: 1
+Epoch  999 | Loss: 0.000105 | pred: 1
 ```
 
-The network is almost entirely confident in class `1` — because after Softmax, one logit (`10`) dominates the other two (`1` and `-8`) by a wide margin.
+## An Honest Caveat
+
+The loss barely moves here — it drops from `0.000123` to `0.000105` over 1000 epochs. That's not a bug. It's because the hand-picked initial weights already predicted the correct class (`1`) with 99.99% confidence *before training even started*. The network had almost nothing left to learn.
+
+That means this version proves the **mechanics** are correct (the gradients are well-formed, the loss decreases monotonically, nothing diverges) — but it doesn't yet demonstrate *learning* in any visible way, since there's no real "wrong → right" journey to show.
 
 ## Requirements
 
 ```
 numpy
-```
-
-Install with:
-```bash
-pip install numpy
 ```
 
 ## How to Run
@@ -94,27 +91,18 @@ pip install numpy
 python neuralNetwork.py
 ```
 
+Note: the current script prints every value on every epoch, which floods the console with 1000 iterations' worth of output. Worth trimming the per-epoch `print()` calls and keeping only the `if epoch % 100 == 0` block before sharing this anywhere.
+
 ## What This Project Demonstrates
 
-- How a neural network layer is really just matrix multiplication plus a bias term
-- Why activation functions (ReLU, Softmax) matter — without them, a "deep" network is mathematically no different from a single linear model
-- The mechanical difference between a hidden layer (ReLU, used internally) and an output layer (Softmax, used to produce interpretable probabilities)
-- How raw, unbounded logits get converted into a real probability distribution
-- Why floating-point stability matters — subtracting `np.max(z)` before exponentiating in Softmax prevents overflow on large logits
-
-## What's Deliberately Missing (for now)
-
-This script only computes a **forward pass** — it makes one prediction with fixed, hand-picked weights. It does not:
-
-- Learn from data (no training loop)
-- Compute a loss (no comparison against a true label)
-- Update weights (no gradient descent, no backpropagation)
-
-That's intentional — this project is step one of two. The next step is deriving backpropagation by hand and using it to actually train these weights instead of hardcoding them.
+- How to derive and implement backpropagation manually, layer by layer, using the chain rule
+- Why Softmax + Cross-Entropy are paired so often: their combined gradient simplifies to `Y_hat - Y`
+- How the gradient of the loss flows backward through each layer (`dz2 → dA1 → dz1`) and gets converted into weight/bias updates
+- Why initialization matters: a network that starts "already correct" has nothing meaningful to learn, no matter how many epochs you run
 
 ## Next Steps
 
-- Add a loss function (e.g. cross-entropy, which pairs naturally with Softmax)
-- Derive the gradients of that loss with respect to `W1`, `b1`, `W2`, `b2` by hand
-- Implement backpropagation and a training loop from scratch
-- Compare the hand-derived gradients against PyTorch's `autograd` to confirm they match
+- **Randomize the initial weights** (e.g. small random values instead of hand-picked ones) so the network actually starts wrong and you can watch the loss drop meaningfully — right now there's no visible "learning curve" to show.
+- **Add more training examples** — currently there's exactly one `(X, Y)` pair, so the network is memorizing a single point rather than learning a general function. Train on a small set (e.g. XOR, as the original roadmap suggests) to see real generalization.
+- **Plot the loss curve** across epochs (matplotlib) once there's an interesting curve to show — this is the single best way to visually prove "the network learned something."
+- **Compare against PyTorch's `autograd`** — feed the same inputs/weights into a PyTorch version, call `.backward()`, and confirm the gradients match your hand-derived ones exactly. That comparison is the real payoff of doing this manually first.
