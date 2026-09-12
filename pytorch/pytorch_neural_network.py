@@ -25,10 +25,23 @@ class XORModel(nn.Module):
         Z2 = self.layer2(A1)
         return Z2
 model = XORModel()
-logits = model(X)
-print(logits) #random initialization of weights and biases, so output will be different each time
 
 #calculate the loss
 loss_fn = nn.CrossEntropyLoss()
-loss = loss_fn(logits, y) #convert y to long type for CrossEntropyLoss
-print(loss)
+
+#optimizer
+optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+#training
+for epoch in range(1000):
+    optimizer.zero_grad() #clear gradients from previous step
+    logits = model(X) #run X through the model to get predictions
+    loss = loss_fn(logits, y)
+    loss.backward()
+    optimizer.step() #update the weights based on the gradients
+    if epoch % 100 == 0:
+        print("Logits:", logits)
+        print("Predictions:", torch.argmax(logits, dim=1))
+        print("Actual:", y)
+        print(epoch, loss.item())
+
