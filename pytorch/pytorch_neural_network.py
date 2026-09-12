@@ -1,6 +1,7 @@
 print("Script started")
 import torch
 import torch.nn as nn
+torch.manual_seed(42)
 
 #create tensor for features of XOR
 X = torch.tensor([
@@ -16,8 +17,8 @@ y = torch.tensor([0,1,1,0]) #labels for XOR
 class XORModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(2,2)
-        self.layer2 = nn.Linear(2,2)
+        self.layer1 = nn.Linear(2,4)
+        self.layer2 = nn.Linear(4,2)
 
     def forward(self,x):
         Z1 = self.layer1(x)
